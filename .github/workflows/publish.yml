@@ -1,0 +1,33 @@
+name: Publish due Instagram posts
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency:
+  group: publisher
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Publish
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          GRAPH_API_VERSION: ${{ vars.GRAPH_API_VERSION || 'v24.0' }}
+        run: python publish.py
+      - name: Save queue + log
+        if: always()
+        run: |
+          git config user.name "marc-ai-publisher"
+          git config user.email "actions@users.noreply.github.com"
+          git add queue.json published.log || true
+          git diff --cached --quiet || (git commit -m "publisher: update queue [skip ci]" && git pull --rebase && git push)
