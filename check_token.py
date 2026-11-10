@@ -15,8 +15,9 @@ import time
 import requests
 
 GRAPH = f"https://graph.facebook.com/{os.getenv('GRAPH_API_VERSION', 'v24.0')}"
-APP_ID, SECRET = os.environ["META_APP_ID"], os.environ["META_APP_SECRET"]
-TOKEN = os.environ["IG_ACCESS_TOKEN"]
+# .strip(): a value pasted into a GitHub secret often carries an invisible space or line break
+APP_ID, SECRET = os.environ.get("META_APP_ID", "").strip(), os.environ.get("META_APP_SECRET", "").strip()
+TOKEN = os.environ.get("IG_ACCESS_TOKEN", "").strip()
 
 
 def update_secret(name: str, value: str) -> None:
@@ -34,10 +35,14 @@ def update_secret(name: str, value: str) -> None:
 
 
 def main() -> None:
-    d = requests.get(f"{GRAPH}/debug_token", params={"input_token": TOKEN, "access_token": f"{APP_ID}|{SECRET}"},
-                     timeout=30).json().get("data", {})
+    resp = requests.get(f"{GRAPH}/debug_token", params={"input_token": TOKEN, "access_token": f"{APP_ID}|{SECRET}"},
+                        timeout=30).json()
+    d = resp.get("data", {})
     if not d.get("is_valid"):
-        sys.exit(f"TOKEN INVALID: {d.get('error', d)} -> re-run scripts/get_token.py and update the secret.")
+        # lengths only (never values) so a wrongly pasted secret can be spotted; GitHub also masks secret values
+        lens = {k: len(os.environ.get(k, "").strip()) for k in ("META_APP_ID", "META_APP_SECRET", "IG_ACCESS_TOKEN")}
+        why = (resp.get("error") or d.get("error") or {}).get("message", "no reason given")
+        sys.exit(f"TOKEN INVALID: {why} | secret lengths {lens} -> check the secrets (or re-run scripts/get_token.py).")
     exp = d.get("expires_at") or 0
     days = (exp - time.time()) / 86400 if exp else None
     print(f"Token type={d.get('type')} valid=True expires_in_days={'never' if days is None else round(days, 1)}")
